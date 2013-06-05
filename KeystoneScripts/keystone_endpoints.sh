@@ -4,26 +4,28 @@
 
 # Mainly inspired by https://github.com/openstack/keystone/blob/master/tools/sample_data.sh
 
-# Modified by Bilel Msekni / Institut Telecom
+# Modified by Kai Zhang / kimi.zhangkai@gmail.com
 #
 # Support: openstack@lists.launchpad.net
 # License: Apache Software License (ASL) 2.0
 #
 
 # Host address
-HOST_IP=10.10.100.51
-EXT_HOST_IP=192.168.100.51
+HOST_IP=10.10.10.200
+EXT_HOST_IP=198.154.120.143
+SWIFT_PROXY_IP=10.10.10.1
+EXT_SWIFT_PROXY_IP=198.154.120.134
 
 # MySQL definitions
-MYSQL_USER=keystoneUser
+MYSQL_USER=keystone
 MYSQL_DATABASE=keystone
-MYSQL_HOST=$HOST_IP
-MYSQL_PASSWORD=keystonePass
+MYSQL_HOST=10.10.10.100
+MYSQL_PASSWORD=password
 
 # Keystone definitions
 KEYSTONE_REGION=RegionOne
-export SERVICE_TOKEN=ADMIN
-export SERVICE_ENDPOINT="http://${HOST_IP}:35357/v2.0"
+export SERVICE_TOKEN=password
+export SERVICE_ENDPOINT="http://localhost:35357/v2.0"
 
 while getopts "u:D:p:m:K:R:E:T:vh" opt; do
   case $opt in
@@ -105,6 +107,7 @@ keystone service-create --name glance --type image --description 'OpenStack Imag
 keystone service-create --name keystone --type identity --description 'OpenStack Identity'
 keystone service-create --name ec2 --type ec2 --description 'OpenStack EC2 service'
 keystone service-create --name quantum --type network --description 'OpenStack Networking service'
+keystone service-create --name swift --type object-store --description="Object Storage Service"
 
 create_endpoint () {
   case $1 in
@@ -126,10 +129,13 @@ create_endpoint () {
     network)
     keystone endpoint-create --region $KEYSTONE_REGION --service-id $2 --publicurl 'http://'"$EXT_HOST_IP"':9696/' --adminurl 'http://'"$HOST_IP"':9696/' --internalurl 'http://'"$HOST_IP"':9696/'
     ;;
+    object-store)
+    keystone endpoint-create --region $KEYSTONE_REGION --service-id $2 --publicurl 'http://'"$EXT_SWIFT_PROXY_IP"':8080/v1/AUTH_%(tenant_id)s' --adminurl 'http://'"$SWIFT_PROXY_IP"':8080/v1' --internalurl 'http://'"$SWIFT_PROXY_IP"':8080/v1/AUTH_%(tenant_id)s'
+    ;;
   esac
 }
 
 for i in compute volume image object-store identity ec2 network; do
-  id=`mysql -h "$MYSQL_HOST" -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE" -ss -e "SELECT id FROM service WHERE type='"$i"';"` || exit 1
+  id=`mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -h "$MYSQL_HOST" "$MYSQL_DATABASE" -ss -e "SELECT id FROM service WHERE type='"$i"';"` || exit 1
   create_endpoint $i $id
 done
